@@ -16,16 +16,17 @@ Accept: application/json
     }
   ],
   "columns": [
-    "Sales.OrderID",
-    "Products.Name",
-    "Products.Category",
-    "Sales.Qty",
-    "Sales.UnitPrice",
-    "Sales.OrderDate"
+    "OrderID",
+    "Qty",
+    "UnitPrice",
+    "OrderDate",
+    "Name",
+    "Category"
   ],
-  "filter": "Products.Category = 'Electronics'",
-  "orderBy": "Sales.OrderDate DESC",
+  "filter": "Category = 'Electronics'",
+  "orderBy": "OrderDate DESC",
   "limit": 10,
   "exportSheetName": "TopElectronicsSales"
 }
+
 

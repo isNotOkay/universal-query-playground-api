@@ -25,28 +25,31 @@ namespace UniversalQueryPlaygroundApi.Repositories
         {
             using var workbook = new XLWorkbook(_excelPath);
 
-            // Load base table (sheet)
+            // 1️⃣ Load base sheet
             var data = LoadSheet(workbook, request.Table);
 
-            // Joins
+            // 2️⃣ Apply joins (inner join by column)
             if (request.Joins != null)
             {
                 foreach (var join in request.Joins)
                 {
                     var right = LoadSheet(workbook, join.Table);
-                    var leftKey = $"{request.Table}.{join.LeftColumn}";
-                    var rightKey = $"{join.Table}.{join.RightColumn}";
+                    var leftKey = join.LeftColumn;
+                    var rightKey = join.RightColumn;
 
                     data = (from l in data
                             join r in right
                             on l[leftKey] equals r[rightKey]
                             select l.Concat(r)
+                                    // Handle duplicate columns: last one wins
+                                    .GroupBy(kv => kv.Key)
+                                    .Select(g => g.Last())
                                     .ToDictionary(kv => kv.Key, kv => kv.Value))
                            .ToList();
                 }
             }
 
-            // Filter (basic col = value)
+            // 3️⃣ Apply filtering (basic col = value)
             if (!string.IsNullOrWhiteSpace(request.Filter))
             {
                 var parts = request.Filter.Split('=', 2);
@@ -62,7 +65,7 @@ namespace UniversalQueryPlaygroundApi.Repositories
                 }
             }
 
-            // Ordering (before projection)
+            // 4️⃣ Apply ordering (before projection)
             if (!string.IsNullOrWhiteSpace(request.OrderBy))
             {
                 var parts = request.OrderBy.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -74,7 +77,7 @@ namespace UniversalQueryPlaygroundApi.Repositories
                     if (!row.TryGetValue(col, out var value) || value == null)
                         return null;
 
-                    if (value is DateTime dt)
+                    if (DateTime.TryParse(value.ToString(), out var dt))
                         return dt;
 
                     if (double.TryParse(value.ToString(), out var dbl))
@@ -88,7 +91,7 @@ namespace UniversalQueryPlaygroundApi.Repositories
                     : data.OrderBy(keySelector, Comparer<object>.Create(CompareValues)).ToList();
             }
 
-            // Projection (select specific columns)
+            // 5️⃣ Projection (SELECT specific columns)
             if (request.Columns != null && request.Columns.Any())
             {
                 data = data.Select(row =>
@@ -97,14 +100,14 @@ namespace UniversalQueryPlaygroundApi.Repositories
                 ).ToList();
             }
 
-            // Offset & Limit (pagination)
+            // 6️⃣ Offset & Limit (pagination)
             if (request.Offset.HasValue)
                 data = data.Skip(request.Offset.Value).ToList();
 
             if (request.Limit.HasValue)
                 data = data.Take(request.Limit.Value).ToList();
 
-            // ✅ Export to a named sheet if requested
+            // 7️⃣ Export to Excel sheet if requested
             if (data.Any() && !string.IsNullOrWhiteSpace(request.ExportSheetName))
             {
                 ExportResultToSheet(data, request.ExportSheetName);
@@ -114,7 +117,7 @@ namespace UniversalQueryPlaygroundApi.Repositories
         }
 
         /// <summary>
-        /// Loads a sheet into memory as a list of row dictionaries, namespacing columns with sheet name.
+        /// Loads a sheet into memory as a list of dictionaries (no column prefixes).
         /// </summary>
         private List<Dictionary<string, object>> LoadSheet(XLWorkbook workbook, string sheetName)
         {
@@ -127,14 +130,14 @@ namespace UniversalQueryPlaygroundApi.Repositories
             return sheet.RangeUsed().RowsUsed().Skip(1)
                 .Select(row => headers.Select((h, i) =>
                         new KeyValuePair<string, object>(
-                            $"{sheetName}.{h}",
+                            h, // ✅ no prefix anymore
                             row.Cell(i + 1).GetString()))
                     .ToDictionary(kv => kv.Key, kv => kv.Value))
                 .ToList();
         }
 
         /// <summary>
-        /// Exports query result to a new sheet with the given name, replacing existing sheet if it exists.
+        /// Exports query result to a new sheet with the given name. Replaces sheet if it exists.
         /// </summary>
         private void ExportResultToSheet(List<Dictionary<string, object>> data, string sheetName)
         {
@@ -176,7 +179,6 @@ namespace UniversalQueryPlaygroundApi.Repositories
 
             workbook.Save();
         }
-
 
         /// <summary>
         /// Safe comparer for mixed/null Excel values.
