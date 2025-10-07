@@ -25,6 +25,7 @@ namespace UniversalQueryPlaygroundApi.Repositories
         {
             using var workbook = new XLWorkbook(_excelPath);
 
+            // Load base table (sheet)
             var data = LoadSheet(workbook, request.Table);
 
             // Joins
@@ -45,7 +46,7 @@ namespace UniversalQueryPlaygroundApi.Repositories
                 }
             }
 
-            // Filter
+            // Filter (basic col = value)
             if (!string.IsNullOrWhiteSpace(request.Filter))
             {
                 var parts = request.Filter.Split('=', 2);
@@ -61,10 +62,10 @@ namespace UniversalQueryPlaygroundApi.Repositories
                 }
             }
 
-            // Ordering
+            // Ordering (before projection)
             if (!string.IsNullOrWhiteSpace(request.OrderBy))
             {
-                var parts = request.OrderBy.Split(' ');
+                var parts = request.OrderBy.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var col = parts[0];
                 var desc = parts.Length > 1 && parts[1].Equals("DESC", StringComparison.OrdinalIgnoreCase);
 
@@ -87,7 +88,7 @@ namespace UniversalQueryPlaygroundApi.Repositories
                     : data.OrderBy(keySelector, Comparer<object>.Create(CompareValues)).ToList();
             }
 
-            // Projection
+            // Projection (select specific columns)
             if (request.Columns != null && request.Columns.Any())
             {
                 data = data.Select(row =>
@@ -96,22 +97,25 @@ namespace UniversalQueryPlaygroundApi.Repositories
                 ).ToList();
             }
 
-            // Offset & Limit
+            // Offset & Limit (pagination)
             if (request.Offset.HasValue)
                 data = data.Skip(request.Offset.Value).ToList();
 
             if (request.Limit.HasValue)
                 data = data.Take(request.Limit.Value).ToList();
 
-            // ✅ Export results to a new sheet
-            if (data.Any())
+            // ✅ Export to a named sheet if requested
+            if (data.Any() && !string.IsNullOrWhiteSpace(request.ExportSheetName))
             {
-                ExportResultToNewSheet(data);
+                ExportResultToSheet(data, request.ExportSheetName);
             }
 
             return Task.FromResult<IEnumerable<Dictionary<string, object>>>(data);
         }
 
+        /// <summary>
+        /// Loads a sheet into memory as a list of row dictionaries, namespacing columns with sheet name.
+        /// </summary>
         private List<Dictionary<string, object>> LoadSheet(XLWorkbook workbook, string sheetName)
         {
             var sheet = workbook.Worksheet(sheetName);
@@ -129,12 +133,21 @@ namespace UniversalQueryPlaygroundApi.Repositories
                 .ToList();
         }
 
-        private void ExportResultToNewSheet(List<Dictionary<string, object>> data)
+        /// <summary>
+        /// Exports query result to a new sheet with the given name, replacing existing sheet if it exists.
+        /// </summary>
+        private void ExportResultToSheet(List<Dictionary<string, object>> data, string sheetName)
         {
             using var workbook = new XLWorkbook(_excelPath);
 
-            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var sheetName = $"QueryResult_{timestamp}";
+            // Replace existing sheet if present
+            var existing = workbook.Worksheets.FirstOrDefault(s =>
+                s.Name.Equals(sheetName, StringComparison.OrdinalIgnoreCase));
+
+            if (existing != null)
+            {
+                workbook.Worksheets.Delete(existing.Name);
+            }
 
             var ws = workbook.Worksheets.Add(sheetName);
 
@@ -164,6 +177,10 @@ namespace UniversalQueryPlaygroundApi.Repositories
             workbook.Save();
         }
 
+
+        /// <summary>
+        /// Safe comparer for mixed/null Excel values.
+        /// </summary>
         private static int CompareValues(object? x, object? y)
         {
             if (x == null && y == null) return 0;
