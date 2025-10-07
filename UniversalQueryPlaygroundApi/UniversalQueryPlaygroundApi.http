@@ -1,5 +1,17 @@
 @UniversalQueryPlaygroundApi_HostAddress = http://localhost:5224
 
+
+### Upload a new workbook
+POST http://localhost:5224/api/workbook/upload
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="SalesProducts_TestWorkbook.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+< C:\Users\kayod\Desktop\Data\SalesProducts_TestWorkbook.xlsx
+--boundary--
+
 ### Example Excel query (Sales + Products join)
 POST {{UniversalQueryPlaygroundApi_HostAddress}}/api/query
 Content-Type: application/json
