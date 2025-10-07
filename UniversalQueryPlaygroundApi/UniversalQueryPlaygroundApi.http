@@ -1,6 +1,30 @@
 @UniversalQueryPlaygroundApi_HostAddress = http://localhost:5224
 
-GET {{UniversalQueryPlaygroundApi_HostAddress}}/weatherforecast/
+### Example Excel query (Sales + Products join)
+POST {{UniversalQueryPlaygroundApi_HostAddress}}/api/query
+Content-Type: application/json
 Accept: application/json
 
-###
+{
+  "engine": "excel",
+  "table": "Sales",
+  "joins": [
+    {
+      "table": "Products",
+      "leftColumn": "ProductID",
+      "rightColumn": "ProductID"
+    }
+  ],
+  "columns": [
+    "Sales.OrderID",
+    "Products.Name",
+    "Products.Category",
+    "Sales.Qty",
+    "Sales.UnitPrice",
+    "Sales.OrderDate"
+  ],
+  "filter": "Products.Category = 'Electronics'",
+  "orderBy": "Sales.OrderDate DESC",
+  "limit": 10
+}
+
